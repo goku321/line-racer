@@ -66,3 +66,24 @@ func handleConnection(conn net.Conn) {
 
 	log.Print(msg)
 }
+
+// ConnectToNode connects running node to n
+func ConnectToNode(n *Node) {
+	laddr, err := net.ResolveTCPAddr("tcp", n.ID)
+	if err != nil {
+		log.Fatalf("error resolving tcp address: %s, reason: %v", n.ID, err)
+	}
+
+	raddr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:3000")
+	if err != nil {
+		log.Fatalf("error resolving tcp address: %v", err)
+	}
+
+	for {
+		_, err := net.DialTCP("tcp", laddr, raddr)
+		if err != nil {
+			log.Print("failed to establish connection to master, retrying...")
+		}
+		log.Print("waiting for master node to be available")
+	}
+}

@@ -20,5 +20,10 @@ func main() {
 	}
 
 	n := app.NewNode(*clusterIP, *port, *nodeType)
-	app.Listen(n)
+
+	if n.Type == "master" {
+		app.Listen(n)
+	}
+	
+	app.ConnectToNode(n)
 }
