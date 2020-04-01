@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"net"
 	"time"
 )
@@ -24,7 +25,7 @@ type Message struct {
 	Source      Node
 	Dest        Node
 	Type        string
-	Coordinates []int
+	Coordinates [][]int
 }
 
 // NewNode inits and returns new node
@@ -70,9 +71,11 @@ func handleConnection(conn net.Conn) {
 	}
 
 	if msg.Type == "ready" {
-		// newMsg := getNewMessage(msg.Dest, msg.Source)
+		newMsg := getNewMessage(msg.Dest, msg.Source)
 		log.Printf("%s is ready", s)
-		registerRacer(msg.Source.ID)
+		go ConnectToRacer(&msg.Dest, &msg.Source, &newMsg)
+	} else if msg.Type == "running" {
+		// calculate distance
 	}
 }
 
@@ -99,7 +102,6 @@ func ConnectToRacer(master, racer *Node, m *Message) {
 			if err != nil {
 				log.Printf("error communicating to racer: %v", err)
 			}
-			log.Printf("received from master: %v", r)
 			conn.Close()
 			break
 		}
@@ -111,10 +113,13 @@ func getNewMessage(source Node, dest Node) Message {
 		Source:      source,
 		Dest:        dest,
 		Type:        "ready",
-		Coordinates: []int{1, 2},
+		Coordinates: generateNewLap(),
 	}
 }
 
-func registerRacer(r string) {
-	racers = append(racers, r)
+func generateNewLap() [][]int {
+	s := rand.NewSource(time.Now().UnixNano())
+	r := rand.New(s)
+
+	return [][]int{{r.Intn(50000), r.Intn(50000)}, {r.Intn(50000), r.Intn(50000)}}
 }

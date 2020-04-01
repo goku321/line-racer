@@ -59,7 +59,7 @@ func ListenForNewCoordinates(n *app.Node) {
 
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
-	log.Printf("Serving %s\n", conn.RemoteAddr().String())
+	log.Printf("new lap from %s\n", conn.RemoteAddr().String())
 
 	var msg app.Message
 	err := json.NewDecoder(conn).Decode(&msg)
@@ -67,11 +67,11 @@ func handleConnection(conn net.Conn) {
 		log.Print(err)
 	}
 
-	if msg.Type == "new" {
+	if msg.Type == "ready" {
 		race(msg.Coordinates)
 	}
 }
 
-func race(c []int) {
-	log.Print("racing")
+func race(c [][]int) {
+	log.Print("racing on lap %v", c)
 }
