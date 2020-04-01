@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	nodeType := flag.String("nodeType", "racer", "type of node: master/racer")
+	nodeType := flag.String("nodeType", "master", "type of node: master/racer")
 	clusterIP := flag.String("clusterIP", "127.0.0.1", "ip address of the node")
 	port := flag.String("port", "3000", "port to use")
 	flag.Parse()
@@ -26,6 +26,6 @@ func main() {
 		app.Listen(n)
 	}
 
-	racer.SignalMaster(n, nil)
+	racer.SignalMaster(n, &app.Message{Source: *n, })
 	racer.ListenForNewCoordinates(n)
 }

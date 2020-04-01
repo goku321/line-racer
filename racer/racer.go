@@ -26,6 +26,7 @@ func SignalMaster(n *app.Node, m *app.Message) {
 		if err != nil {
 			log.Print("failed to establish connection to master, retrying...")
 		} else {
+			m.Type = "ready"
 			err := json.NewEncoder(conn).Encode(&m)
 			if err != nil {
 				log.Fatalf("error communicating to master: %v", err)

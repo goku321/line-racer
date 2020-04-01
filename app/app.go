@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"time"
 )
+
+var racers []string
 
 // Node represents a process
 type Node struct {
@@ -69,32 +72,35 @@ func handleConnection(conn net.Conn) {
 	if msg.Type == "ready" {
 		// newMsg := getNewMessage(msg.Dest, msg.Source)
 		log.Printf("%s is ready", s)
+		registerRacer(msg.Source.ID)
 	}
 }
 
 // ConnectToRacer connects running node to n
-func ConnectToRacer(n *Node, m *Message) {
-	laddr, err := net.ResolveTCPAddr("tcp", n.ID)
+func ConnectToRacer(master, racer *Node, m *Message) {
+	laddr, err := net.ResolveTCPAddr("tcp", master.ID)
 	if err != nil {
-		log.Fatalf("error resolving tcp address: %s, reason: %v", n.ID, err)
+		log.Fatalf("error resolving tcp address: %s, reason: %v", master.ID, err)
 	}
 
-	raddr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:3000")
+	raddr, err := net.ResolveTCPAddr("tcp", racer.ID)
 	if err != nil {
-		log.Fatalf("error resolving tcp address: %v", err)
+		log.Fatalf("error resolving tcp address: %s, reason: %v", racer.ID, err)
 	}
 
 	for {
 		conn, err := net.DialTCP("tcp", laddr, raddr)
 		if err != nil {
-			log.Print("failed to establish connection to master, retrying...")
+			log.Print("failed to establish connection to racer, retrying...")
+			time.Sleep(time.Second * 5)
 		} else {
-			r := getNewMessage(*n, Node{IPAddr: "127.0.0.1", Port: "3000", Type: "master"})
+			r := getNewMessage(*master, *racer)
 			err := json.NewEncoder(conn).Encode(&r)
 			if err != nil {
-				log.Printf("error communicating to master: %v", err)
+				log.Printf("error communicating to racer: %v", err)
 			}
 			log.Printf("received from master: %v", r)
+			conn.Close()
 			break
 		}
 	}
@@ -107,4 +113,8 @@ func getNewMessage(source Node, dest Node) Message {
 		Type:        "ready",
 		Coordinates: []int{1, 2},
 	}
+}
+
+func registerRacer(r string) {
+	racers = append(racers, r)
 }
