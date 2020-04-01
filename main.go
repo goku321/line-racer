@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/goku321/line-racer/app"
+	"github.com/goku321/line-racer/racer"
 )
 
 func main() {
@@ -24,6 +25,7 @@ func main() {
 	if n.Type == "master" {
 		app.Listen(n)
 	}
-	
-	app.ConnectToNode(n)
+
+	racer.SignalMaster(n, nil)
+	racer.ListenForNewCoordinates(n)
 }

@@ -16,11 +16,12 @@ type Node struct {
 	Status string `json:"status"`
 }
 
-type message struct {
+// Message is a contract between master and racers
+type Message struct {
 	Source      Node
 	Dest        Node
 	Type        string
-	coordinates []int
+	Coordinates []int
 }
 
 // NewNode inits and returns new node
@@ -50,25 +51,29 @@ func Listen(n *Node) {
 			log.Fatal(err)
 		}
 
-		handleConnection(conn)
+		go handleConnection(conn)
 	}
 }
 
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
-	log.Printf("Serving %s\n", conn.RemoteAddr().String())
+	s := conn.RemoteAddr().String()
+	log.Printf("Serving %s\n", s)
 
-	var msg message
+	var msg Message
 	err := json.NewDecoder(conn).Decode(&msg)
 	if err != nil {
 		log.Print(err)
 	}
 
-	log.Print(msg)
+	if msg.Type == "ready" {
+		// newMsg := getNewMessage(msg.Dest, msg.Source)
+		log.Printf("%s is ready", s)
+	}
 }
 
-// ConnectToNode connects running node to n
-func ConnectToNode(n *Node) {
+// ConnectToRacer connects running node to n
+func ConnectToRacer(n *Node, m *Message) {
 	laddr, err := net.ResolveTCPAddr("tcp", n.ID)
 	if err != nil {
 		log.Fatalf("error resolving tcp address: %s, reason: %v", n.ID, err)
@@ -80,10 +85,26 @@ func ConnectToNode(n *Node) {
 	}
 
 	for {
-		_, err := net.DialTCP("tcp", laddr, raddr)
+		conn, err := net.DialTCP("tcp", laddr, raddr)
 		if err != nil {
 			log.Print("failed to establish connection to master, retrying...")
+		} else {
+			r := getNewMessage(*n, Node{IPAddr: "127.0.0.1", Port: "3000", Type: "master"})
+			err := json.NewEncoder(conn).Encode(&r)
+			if err != nil {
+				log.Printf("error communicating to master: %v", err)
+			}
+			log.Printf("received from master: %v", r)
+			break
 		}
-		log.Print("waiting for master node to be available")
+	}
+}
+
+func getNewMessage(source Node, dest Node) Message {
+	return Message{
+		Source:      source,
+		Dest:        dest,
+		Type:        "ready",
+		Coordinates: []int{1, 2},
 	}
 }
