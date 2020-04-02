@@ -8,13 +8,13 @@ import (
 	"net"
 	"sync"
 	"time"
-)
 
-var racers int
-var mutex sync.Mutex
+	"github.com/goku321/line-racer/model"
+)
 
 // Master manages all the racers
 type Master struct {
+	racersCount     int
 	racers          []string
 	laps            []lap
 	currentLapCount int
@@ -24,7 +24,7 @@ type Master struct {
 // lap represent a single lap
 type lap struct {
 	number      int
-	pos         [][]int
+	pos         []model.Point
 	start       string
 	end         string
 	timeElapsed int
@@ -43,16 +43,25 @@ type Node struct {
 
 // Message is a contract between master and racers
 type Message struct {
-	Source      Node
-	Dest        Node
+	Source      *Node
+	Dest        *Node
 	Type        string
-	Coordinates [][]int
+	Coordinates []model.Point
+}
+
+// NewLap generates a new lap
+func NewLap(number int, pos []model.Point) *lap {
+	return &lap{
+		number: number,
+		pos:    pos,
+	}
 }
 
 // New inits new master
-func New() *Master {
+func New(racersCount int) *Master {
 	return &Master{
 		racers:          []string{},
+		racersCount:     racersCount,
 		laps:            []lap{},
 		currentLapCount: 0,
 		mutex:           sync.Mutex{},
@@ -71,7 +80,7 @@ func NewNode(ip, port, t string) *Node {
 }
 
 // Listen starts listening on a port
-func Listen(n *Node) {
+func Listen(n *Node, m *Master) {
 	ln, err := net.Listen("tcp", ":"+n.Port)
 	if err != nil {
 		log.Fatal(err)
@@ -86,11 +95,11 @@ func Listen(n *Node) {
 			log.Fatal(err)
 		}
 
-		go handleConnection(conn)
+		go handleConnection(conn, m)
 	}
 }
 
-func handleConnection(conn net.Conn) {
+func handleConnection(conn net.Conn, m *Master) {
 	defer conn.Close()
 	s := conn.RemoteAddr().String()
 	log.Printf("Serving %s\n", s)
@@ -102,23 +111,28 @@ func handleConnection(conn net.Conn) {
 	}
 
 	if msg.Type == "ready" {
-		mutex.Lock()
-		racerIndex := racers
-		racers++
-		mutex.Unlock()
-		err := json.NewEncoder(conn).Encode(&racerIndex)
-		if err != nil {
-			log.Printf("error communicating with %s", msg.Source.ID)
+		// register racer
+		m.registerRacer(msg.Source)
+
+		// assign a unique index (0 <= index < N)
+		m.mutex.Lock()
+		id := len(m.racers) - 1
+		m.mutex.Unlock()
+
+		if err = json.NewEncoder(conn).Encode(&id); err != nil {
+			log.Fatal(err)
 		}
-		go ConnectToRacer(&msg.Dest, &msg.Source, nil)
+		go SendLap(msg.Dest, msg.Source, m)
+
 	} else if msg.Type == "update" {
 		// do nothing
+		log.Print(msg)
 	}
 }
 
-// ConnectToRacer connects running node to n
-func ConnectToRacer(master, racer *Node, m *Message) {
-	laddr, err := net.ResolveTCPAddr("tcp", master.ID)
+// SendLap connects running node to n
+func SendLap(master, racer *Node, mas *Master) {
+	laddr, err := net.ResolveTCPAddr("tcp", "")
 	if err != nil {
 		log.Fatalf("error resolving tcp address: %s, reason: %v", master.ID, err)
 	}
@@ -131,39 +145,51 @@ func ConnectToRacer(master, racer *Node, m *Message) {
 	for {
 		conn, err := net.DialTCP("tcp", laddr, raddr)
 		if err != nil {
-			log.Print("failed to establish connection to racer, retrying...")
+			log.Print("failed to establish connection to racer, retrying...", err)
 			time.Sleep(time.Second * 5)
 		} else {
-			r := getNewMessage(*master, *racer)
-			err := json.NewEncoder(conn).Encode(&r)
+			// Send current lap
+			r := mas.laps[mas.currentLapCount]
+			newMsg := getNewMessage(master, racer, r.pos)
+			err := json.NewEncoder(conn).Encode(&newMsg)
 			if err != nil {
-				log.Printf("error communicating to racer: %v", err)
+				log.Printf("error sending lap to racer %s", racer.ID)
 			}
-			conn.Close()
 			break
 		}
 	}
 }
 
-func getNewMessage(source Node, dest Node) Message {
+func getNewMessage(source, dest *Node, c []model.Point) Message {
 	return Message{
 		Source:      source,
 		Dest:        dest,
 		Type:        "ready",
-		Coordinates: generateNewLap(2),
+		Coordinates: c,
 	}
 }
 
-func generateNewLap(racersCount int) [][]int {
+// GenerateLaps generates 10 laps for n racers
+func (m *Master) GenerateLaps() {
 	s := rand.NewSource(time.Now().UnixNano())
 	r := rand.New(s)
-	lap := [][]int{}
 
-	for i := 0; i < racersCount; i++ {
-		lap = append(lap, []int{r.Intn(50000), r.Intn(50000)})
+	// 10 is total number of laps
+	for i := 0; i < 10; i++ {
+		l := []model.Point{}
+		for j := 0; j < m.racersCount; j++ {
+			p := model.New(r.Intn(50000), r.Intn(50000))
+			l = append(l, p)
+		}
+		lap := NewLap(i, l)
+		m.laps = append(m.laps, *lap)
 	}
+}
 
-	return lap
+func (m *Master) registerRacer(r *Node) {
+	m.mutex.Lock()
+	m.racers = append(m.racers, r.IPAddr+":"+r.Port)
+	m.mutex.Unlock()
 }
 
 // func calculateDistance() {

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/goku321/line-racer/master"
+	"github.com/goku321/line-racer/model"
 )
 
 // SignalMaster sends a signal to master process
@@ -29,6 +30,7 @@ func SignalMaster(n *master.Node, m *master.Message) {
 			time.Sleep(time.Second * 5)
 		} else {
 			m.Type = "ready"
+			m.Dest = master.NewNode("127.0.0.1", "3000", "master")
 			err := json.NewEncoder(conn).Encode(&m)
 			if err != nil {
 				log.Fatalf("error communicating to master: %v", err)
@@ -77,6 +79,6 @@ func handleConnection(conn net.Conn) {
 	}
 }
 
-func race(c [][]int) {
+func race(c []model.Point) {
 	log.Printf("racing on lap %v", c)
 }
