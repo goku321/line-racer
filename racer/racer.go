@@ -4,13 +4,14 @@ import (
 	"encoding/json"
 	"log"
 	"net"
+	"time"
 
-	"github.com/goku321/line-racer/app"
+	"github.com/goku321/line-racer/master"
 )
 
 // SignalMaster sends a signal to master process
 // with its coordinates
-func SignalMaster(n *app.Node, m *app.Message) {
+func SignalMaster(n *master.Node, m *master.Message) {
 	laddr, err := net.ResolveTCPAddr("tcp", n.ID)
 	if err != nil {
 		log.Fatalf("error resolving tcp address: %s, reason: %v", n.ID, err)
@@ -25,12 +26,16 @@ func SignalMaster(n *app.Node, m *app.Message) {
 		conn, err := net.DialTCP("tcp", laddr, raddr)
 		if err != nil {
 			log.Print("failed to establish connection to master, retrying...")
+			time.Sleep(time.Second * 5)
 		} else {
 			m.Type = "ready"
 			err := json.NewEncoder(conn).Encode(&m)
 			if err != nil {
 				log.Fatalf("error communicating to master: %v", err)
 			}
+			var id int
+			err = json.NewDecoder(conn).Decode(&id)
+			log.Printf("id received from master %d", id)
 			conn.Close()
 			break
 		}
@@ -38,7 +43,7 @@ func SignalMaster(n *app.Node, m *app.Message) {
 }
 
 // ListenForNewCoordinates waits for master to get new coordinates
-func ListenForNewCoordinates(n *app.Node) {
+func ListenForNewCoordinates(n *master.Node) {
 	ln, err := net.Listen("tcp", ":"+n.Port)
 	if err != nil {
 		log.Fatal(err)
@@ -61,7 +66,7 @@ func handleConnection(conn net.Conn) {
 	defer conn.Close()
 	log.Printf("new lap from %s\n", conn.RemoteAddr().String())
 
-	var msg app.Message
+	var msg master.Message
 	err := json.NewDecoder(conn).Decode(&msg)
 	if err != nil {
 		log.Print(err)
@@ -73,5 +78,5 @@ func handleConnection(conn net.Conn) {
 }
 
 func race(c [][]int) {
-	log.Print("racing on lap %v", c)
+	log.Printf("racing on lap %v", c)
 }

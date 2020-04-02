@@ -5,7 +5,7 @@ import (
 	"log"
 	"strconv"
 
-	"github.com/goku321/line-racer/app"
+	master "github.com/goku321/line-racer/master"
 	"github.com/goku321/line-racer/racer"
 )
 
@@ -20,12 +20,12 @@ func main() {
 		log.Fatalf("error parsing port number: %s", *port)
 	}
 
-	n := app.NewNode(*clusterIP, *port, *nodeType)
+	n := master.NewNode(*clusterIP, *port, *nodeType)
 
 	if n.Type == "master" {
-		app.Listen(n)
+		master.Listen(n)
 	}
 
-	racer.SignalMaster(n, &app.Message{Source: *n, })
+	racer.SignalMaster(n, &master.Message{Source: *n})
 	racer.ListenForNewCoordinates(n)
 }

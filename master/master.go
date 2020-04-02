@@ -1,4 +1,4 @@
-package app
+package master
 
 import (
 	"encoding/json"
@@ -6,10 +6,31 @@ import (
 	"log"
 	"math/rand"
 	"net"
+	"sync"
 	"time"
 )
 
-var racers []string
+var racers int
+var mutex sync.Mutex
+
+// Master manages all the racers
+type Master struct {
+	racers          []string
+	laps            []lap
+	currentLapCount int
+	mutex           sync.Mutex
+}
+
+// lap represent a single lap
+type lap struct {
+	number      int
+	pos         [][]int
+	start       string
+	end         string
+	timeElapsed int
+}
+
+var laps map[int]lap
 
 // Node represents a process
 type Node struct {
@@ -26,6 +47,16 @@ type Message struct {
 	Dest        Node
 	Type        string
 	Coordinates [][]int
+}
+
+// New inits new master
+func New() *Master {
+	return &Master{
+		racers:          []string{},
+		laps:            []lap{},
+		currentLapCount: 0,
+		mutex:           sync.Mutex{},
+	}
 }
 
 // NewNode inits and returns new node
@@ -71,11 +102,17 @@ func handleConnection(conn net.Conn) {
 	}
 
 	if msg.Type == "ready" {
-		newMsg := getNewMessage(msg.Dest, msg.Source)
-		log.Printf("%s is ready", s)
-		go ConnectToRacer(&msg.Dest, &msg.Source, &newMsg)
-	} else if msg.Type == "running" {
-		// calculate distance
+		mutex.Lock()
+		racerIndex := racers
+		racers++
+		mutex.Unlock()
+		err := json.NewEncoder(conn).Encode(&racerIndex)
+		if err != nil {
+			log.Printf("error communicating with %s", msg.Source.ID)
+		}
+		go ConnectToRacer(&msg.Dest, &msg.Source, nil)
+	} else if msg.Type == "update" {
+		// do nothing
 	}
 }
 
@@ -113,13 +150,24 @@ func getNewMessage(source Node, dest Node) Message {
 		Source:      source,
 		Dest:        dest,
 		Type:        "ready",
-		Coordinates: generateNewLap(),
+		Coordinates: generateNewLap(2),
 	}
 }
 
-func generateNewLap() [][]int {
+func generateNewLap(racersCount int) [][]int {
 	s := rand.NewSource(time.Now().UnixNano())
 	r := rand.New(s)
+	lap := [][]int{}
 
-	return [][]int{{r.Intn(50000), r.Intn(50000)}, {r.Intn(50000), r.Intn(50000)}}
+	for i := 0; i < racersCount; i++ {
+		lap = append(lap, []int{r.Intn(50000), r.Intn(50000)})
+	}
+
+	return lap
 }
+
+// func calculateDistance() {
+// 	for {
+// 		if len(racers) >
+// 	}
+// }
