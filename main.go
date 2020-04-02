@@ -4,10 +4,13 @@ import (
 	"flag"
 	"log"
 	"strconv"
+	"sync"
 
 	master "github.com/goku321/line-racer/master"
 	"github.com/goku321/line-racer/racer"
 )
+
+var wg sync.WaitGroup
 
 func main() {
 	nodeType := flag.String("nodeType", "racer", "type of node: master/racer")
@@ -24,11 +27,12 @@ func main() {
 	n := master.NewNode(*clusterIP, *port, *nodeType)
 
 	if n.Type == "master" {
-		m := master.New(*racers)
+		m := master.New(*clusterIP, *port, *racers)
 		m.GenerateLaps()
-		master.Listen(n, m)
+		m.Listen()
 	}
 
-	racer.SignalMaster(n, &master.Message{Source: n})
- 	racer.ListenForNewCoordinates(n)
+	r := racer.New(*clusterIP, *port)
+	r.SignalMaster(&master.Message{Source: r.IPAddr + ":" + r.Port})
+	r.ListenForNewCoordinates(n)
 }

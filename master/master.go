@@ -14,6 +14,8 @@ import (
 
 // Master manages all the racers
 type Master struct {
+	IPAddr          string
+	Port            string
 	racersCount     int
 	racers          []string
 	laps            []lap
@@ -30,8 +32,6 @@ type lap struct {
 	timeElapsed int
 }
 
-var laps map[int]lap
-
 // Node represents a process
 type Node struct {
 	ID     string `json:"id"`
@@ -43,8 +43,8 @@ type Node struct {
 
 // Message is a contract between master and racers
 type Message struct {
-	Source      *Node
-	Dest        *Node
+	Source      string
+	Dest        string
 	Type        string
 	Coordinates []model.Point
 }
@@ -58,8 +58,10 @@ func NewLap(number int, pos []model.Point) *lap {
 }
 
 // New inits new master
-func New(racersCount int) *Master {
+func New(ip, port string, racersCount int) *Master {
 	return &Master{
+		IPAddr:          ip,
+		Port:            port,
 		racers:          []string{},
 		racersCount:     racersCount,
 		laps:            []lap{},
@@ -80,14 +82,13 @@ func NewNode(ip, port, t string) *Node {
 }
 
 // Listen starts listening on a port
-func Listen(n *Node, m *Master) {
-	ln, err := net.Listen("tcp", ":"+n.Port)
+func (m *Master) Listen() {
+	ln, err := net.Listen("tcp", ":"+m.Port)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	n.Status = "up"
-	log.Printf("%s listening on %s:%s", n.Type, n.IPAddr, n.Port)
+	log.Printf("master listening on %s:%s", m.IPAddr, m.Port)
 
 	for {
 		conn, err := ln.Accept()
@@ -122,24 +123,24 @@ func handleConnection(conn net.Conn, m *Master) {
 		if err = json.NewEncoder(conn).Encode(&id); err != nil {
 			log.Fatal(err)
 		}
-		go SendLap(msg.Dest, msg.Source, m)
+		go m.SendLap(msg.Source)
 
 	} else if msg.Type == "update" {
 		// do nothing
-		log.Print(msg)
+		log.Printf("racer %s position update: (%d, %d)", msg.Source, msg.Coordinates[0].X, msg.Coordinates[0].Y)
 	}
 }
 
-// SendLap connects running node to n
-func SendLap(master, racer *Node, mas *Master) {
+// SendLap sends a lap to racers
+func (m *Master) SendLap(racer string) {
 	laddr, err := net.ResolveTCPAddr("tcp", "")
 	if err != nil {
-		log.Fatalf("error resolving tcp address: %s, reason: %v", master.ID, err)
+		log.Fatalf("error resolving tcp address: %v", err)
 	}
 
-	raddr, err := net.ResolveTCPAddr("tcp", racer.ID)
+	raddr, err := net.ResolveTCPAddr("tcp", racer)
 	if err != nil {
-		log.Fatalf("error resolving tcp address: %s, reason: %v", racer.ID, err)
+		log.Fatalf("error resolving tcp address: %s, reason: %v", racer, err)
 	}
 
 	for {
@@ -149,18 +150,19 @@ func SendLap(master, racer *Node, mas *Master) {
 			time.Sleep(time.Second * 5)
 		} else {
 			// Send current lap
-			r := mas.laps[mas.currentLapCount]
-			newMsg := getNewMessage(master, racer, r.pos)
+			r := m.laps[m.currentLapCount]
+			newMsg := getNewMessage(m.IPAddr+":"+m.Port, racer, r.pos)
+			newMsg.Type = "race"
 			err := json.NewEncoder(conn).Encode(&newMsg)
 			if err != nil {
-				log.Printf("error sending lap to racer %s", racer.ID)
+				log.Printf("error sending lap to racer %s", racer)
 			}
 			break
 		}
 	}
 }
 
-func getNewMessage(source, dest *Node, c []model.Point) Message {
+func getNewMessage(source, dest string, c []model.Point) Message {
 	return Message{
 		Source:      source,
 		Dest:        dest,
@@ -186,9 +188,9 @@ func (m *Master) GenerateLaps() {
 	}
 }
 
-func (m *Master) registerRacer(r *Node) {
+func (m *Master) registerRacer(r string) {
 	m.mutex.Lock()
-	m.racers = append(m.racers, r.IPAddr+":"+r.Port)
+	m.racers = append(m.racers, r)
 	m.mutex.Unlock()
 }
 
