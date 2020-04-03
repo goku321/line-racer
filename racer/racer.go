@@ -62,7 +62,6 @@ func (r *Racer) SignalMaster(m *master.Message) {
 				log.Fatalf("error receiving id from master: %v", err)
 			}
 			updateRacerID(r, id)
-			log.Printf("id received from master %d", id)
 			conn.Close()
 			break
 		}

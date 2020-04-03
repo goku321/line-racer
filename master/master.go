@@ -18,7 +18,7 @@ type Master struct {
 	Port            string
 	racersCount     int
 	racers          map[int]string
-	posUpdates      []model.Point
+	posUpdates      []pos
 	laps            []lap
 	currentLapCount int
 	mutex           sync.Mutex
@@ -31,6 +31,12 @@ type lap struct {
 	start       string
 	end         string
 	timeElapsed int
+}
+
+// pos ...
+type pos struct {
+	id string
+	model.Point
 }
 
 // Node represents a process
@@ -127,7 +133,7 @@ func handleConnection(conn net.Conn, m *Master) {
 
 	} else if msg.Type == "pos" {
 		log.Printf("racer %s position update: (%d, %d)", msg.Source, msg.Coordinates[0].X, msg.Coordinates[0].Y)
-		m.updatePOS(msg.Coordinates[0])
+		m.updatePOS(msg.Source, msg.Coordinates[0])
 	}
 }
 
@@ -194,9 +200,13 @@ func (m *Master) registerRacer(id int, r string) {
 	m.mutex.Unlock()
 }
 
-func (m *Master) updatePOS(p model.Point) {
+func (m *Master) updatePOS(id string, p model.Point) {
+	u := &pos{
+		id:    id,
+		Point: p,
+	}
 	m.mutex.Lock()
-	m.posUpdates = append(m.posUpdates, p)
+	m.posUpdates = append(m.posUpdates, *u)
 	m.mutex.Unlock()
 }
 
@@ -206,14 +216,18 @@ func (m *Master) CalculateDistance() {
 		if len(m.posUpdates) >= 2 {
 			p1 := m.posUpdates[0]
 			p2 := m.posUpdates[1]
-
-			d := p1.Distance(p2)
-			if d == 0 {
+			if p1.id == p2.id {
 				m.mutex.Lock()
 				m.posUpdates = m.posUpdates[1:]
 				m.mutex.Unlock()
-			} else if d > 10 {
-				log.Fatal("distance exceeds 10 units")
+			} else {
+
+				d := p1.Point.Distance(p2.Point)
+
+				if d > 10 {
+					// start a new lap
+					log.Fatal("distance exceeds 10 units")
+				}
 			}
 		}
 	}
