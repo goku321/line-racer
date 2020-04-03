@@ -17,7 +17,8 @@ type Master struct {
 	IPAddr          string
 	Port            string
 	racersCount     int
-	racers          []string
+	racers          map[int]string
+	posUpdates      []model.Point
 	laps            []lap
 	currentLapCount int
 	mutex           sync.Mutex
@@ -62,7 +63,7 @@ func New(ip, port string, racersCount int) *Master {
 	return &Master{
 		IPAddr:          ip,
 		Port:            port,
-		racers:          []string{},
+		racers:          map[int]string{},
 		racersCount:     racersCount,
 		laps:            []lap{},
 		currentLapCount: 0,
@@ -112,22 +113,21 @@ func handleConnection(conn net.Conn, m *Master) {
 	}
 
 	if msg.Type == "ready" {
-		// register racer
-		m.registerRacer(msg.Source)
-
 		// assign a unique index (0 <= index < N)
 		m.mutex.Lock()
-		id := len(m.racers) - 1
+		id := len(m.racers)
 		m.mutex.Unlock()
 
+		// register racer
+		m.registerRacer(id, msg.Source)
 		if err = json.NewEncoder(conn).Encode(&id); err != nil {
 			log.Fatal(err)
 		}
 		go m.SendLap(msg.Source)
 
-	} else if msg.Type == "update" {
-		// do nothing
+	} else if msg.Type == "pos" {
 		log.Printf("racer %s position update: (%d, %d)", msg.Source, msg.Coordinates[0].X, msg.Coordinates[0].Y)
+		m.updatePOS(msg.Coordinates[0])
 	}
 }
 
@@ -188,14 +188,33 @@ func (m *Master) GenerateLaps() {
 	}
 }
 
-func (m *Master) registerRacer(r string) {
+func (m *Master) registerRacer(id int, r string) {
 	m.mutex.Lock()
-	m.racers = append(m.racers, r)
+	m.racers[id] = r
 	m.mutex.Unlock()
 }
 
-// func calculateDistance() {
-// 	for {
-// 		if len(racers) >
-// 	}
-// }
+func (m *Master) updatePOS(p model.Point) {
+	m.mutex.Lock()
+	m.posUpdates = append(m.posUpdates, p)
+	m.mutex.Unlock()
+}
+
+// CalculateDistance constantly polls a slice
+func (m *Master) CalculateDistance() {
+	for {
+		if len(m.posUpdates) >= 2 {
+			p1 := m.posUpdates[0]
+			p2 := m.posUpdates[1]
+
+			d := p1.Distance(p2)
+			if d == 0 {
+				m.mutex.Lock()
+				m.posUpdates = m.posUpdates[1:]
+				m.mutex.Unlock()
+			} else if d > 10 {
+				log.Fatal("distance exceeds 10 units")
+			}
+		}
+	}
+}

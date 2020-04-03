@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/goku321/line-racer/master"
@@ -25,6 +26,10 @@ func New(ip, port string) *Racer {
 		Port:   port,
 		Status: "up",
 	}
+}
+
+func updateRacerID(r *Racer, id int) {
+	r.ID = strconv.Itoa(id)
 }
 
 // SignalMaster sends a signal to master process
@@ -53,7 +58,10 @@ func (r *Racer) SignalMaster(m *master.Message) {
 				log.Fatalf("error communicating to master: %v", err)
 			}
 			var id int
-			err = json.NewDecoder(conn).Decode(&id)
+			if err = json.NewDecoder(conn).Decode(&id); err != nil {
+				log.Fatalf("error receiving id from master: %v", err)
+			}
+			updateRacerID(r, id)
 			log.Printf("id received from master %d", id)
 			conn.Close()
 			break
@@ -79,24 +87,23 @@ func (r *Racer) SendPOSUpdate(m *master.Message) {
 			log.Print("tyring to establish connection to master, retrying in 5 seconds")
 			time.Sleep(time.Second * 5)
 		} else {
-			defer conn.Close()
 			if err = json.NewEncoder(conn).Encode(&m); err != nil {
 				log.Printf("error communicating to master: %v", err)
 			}
+			conn.Close()
 			break
 		}
 	}
 }
 
 // ListenForNewCoordinates waits for master to get new coordinates
-func (r *Racer) ListenForNewCoordinates(n *master.Node) {
+func (r *Racer) ListenForNewCoordinates() {
 	ln, err := net.Listen("tcp", ":"+r.Port)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	n.Status = "up"
-	log.Printf("racer %d listening on %s:%s", r.ID, r.IPAddr, r.Port)
+	log.Printf("racer %s listening on %s:%s", r.ID, r.IPAddr, r.Port)
 
 	for {
 		conn, err := ln.Accept()
@@ -125,13 +132,20 @@ func handleConnection(conn net.Conn, r *Racer) {
 	}
 }
 
-func (r *Racer) race(c []model.Point) {
-	log.Printf("racing on lap %v", c)
-	p := getStartingPoint(c)
+func (r *Racer) race(l []model.Point) {
+	log.Printf("racing on lap %v", l)
+	racerIndex, err := strconv.Atoi(r.ID)
+	if err != nil {
+		log.Fatalf("invalid racer index %s", r.ID)
+	}
+	// add a check for invalid lap
+	m, c := l[racerIndex].X, l[racerIndex].Y
+	p := getStartingPoint(l)
 
 	for {
 		time.Sleep(time.Millisecond * 50)
 		p.X++
+		p.Y = (m * p.X) + c
 		m := &master.Message{
 			Source:      r.ID,
 			Dest:        "127.0.0.1:3000",
