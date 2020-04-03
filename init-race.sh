@@ -1,7 +1,7 @@
 go build
 
-./line-racer &
+/go/bin/line-racer &
 
-./line-racer -nodeType racer -port 3001 &
+/go/bin/line-racer -nodeType racer -port 3001 &
 
-./line-racer -nodeType racer -port 3002 &
+/go/bin/line-racer -nodeType racer -port 3002 &
