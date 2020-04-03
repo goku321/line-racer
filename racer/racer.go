@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/goku321/line-racer/master"
 	"github.com/goku321/line-racer/model"
 )
 
@@ -34,7 +33,7 @@ func updateRacerID(r *Racer, id int) {
 
 // SignalMaster sends a signal to master process
 // with its coordinates
-func (r *Racer) SignalMaster(m *master.Message) {
+func (r *Racer) SignalMaster(m *model.Message) {
 	laddr, err := net.ResolveTCPAddr("tcp", r.IPAddr+":"+r.Port)
 	if err != nil {
 		log.Fatalf("error resolving tcp address: %s, reason: %v", r.IPAddr+":"+r.Port, err)
@@ -69,7 +68,7 @@ func (r *Racer) SignalMaster(m *master.Message) {
 }
 
 // SendPOSUpdate sends position updates to master every 50ms
-func (r *Racer) SendPOSUpdate(m *master.Message) {
+func (r *Racer) SendPOSUpdate(m *model.Message) {
 	laddr, err := net.ResolveTCPAddr("tcp", "")
 	if err != nil {
 		log.Fatalf("error resolving tcp address: %s, reason: %v", r.IPAddr+":"+r.Port, err)
@@ -118,7 +117,7 @@ func handleConnection(conn net.Conn, r *Racer) {
 	defer conn.Close()
 	log.Println("new lap from master")
 
-	var msg master.Message
+	var msg model.Message
 	err := json.NewDecoder(conn).Decode(&msg)
 	if err != nil {
 		log.Print(err)
@@ -145,7 +144,7 @@ func (r *Racer) race(l []model.Point) {
 		time.Sleep(time.Millisecond * 50)
 		p.X++
 		p.Y = (m * p.X) + c
-		m := &master.Message{
+		m := &model.Message{
 			Source:      r.ID,
 			Dest:        "127.0.0.1:3000",
 			Type:        "pos",

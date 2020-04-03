@@ -48,14 +48,6 @@ type Node struct {
 	Status string `json:"status"`
 }
 
-// Message is a contract between master and racers
-type Message struct {
-	Source      string
-	Dest        string
-	Type        string
-	Coordinates []model.Point
-}
-
 // NewLap generates a new lap
 func NewLap(number int, pos []model.Point) *lap {
 	return &lap{
@@ -112,7 +104,7 @@ func handleConnection(conn net.Conn, m *Master) {
 	s := conn.RemoteAddr().String()
 	log.Printf("Serving %s\n", s)
 
-	var msg Message
+	var msg model.Message
 	err := json.NewDecoder(conn).Decode(&msg)
 	if err != nil {
 		log.Print(err)
@@ -157,7 +149,7 @@ func (m *Master) SendLap(racer string) {
 		} else {
 			// Send current lap
 			r := m.laps[m.currentLapCount]
-			newMsg := getNewMessage(m.IPAddr+":"+m.Port, racer, r.pos)
+			newMsg := model.NewMessage(m.IPAddr+":"+m.Port, racer, r.pos)
 			newMsg.Type = "race"
 			err := json.NewEncoder(conn).Encode(&newMsg)
 			if err != nil {
@@ -165,15 +157,6 @@ func (m *Master) SendLap(racer string) {
 			}
 			break
 		}
-	}
-}
-
-func getNewMessage(source, dest string, c []model.Point) Message {
-	return Message{
-		Source:      source,
-		Dest:        dest,
-		Type:        "ready",
-		Coordinates: c,
 	}
 }
 
