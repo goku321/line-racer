@@ -205,13 +205,28 @@ func (m *Master) CalculateDistance() {
 				m.mutex.Unlock()
 			} else {
 
+				m.mutex.Lock()
+				m.posUpdates = m.posUpdates[2:]
+				m.mutex.Unlock()
 				d := p1.Point.Distance(p2.Point)
 
 				if d > 10 {
 					// start a new lap
-					log.Fatal("distance exceeds 10 units")
+					log.Print("distance exceeds 10 units")
+					m.startNewLap()
 				}
 			}
 		}
+	}
+}
+
+func (m *Master) startNewLap() {
+	if m.currentLapCount == 9 {
+		log.Fatal("race finished")
+		
+	}
+	m.currentLapCount++
+	for _, v := range m.racers {
+		go m.SendLap(v)
 	}
 }

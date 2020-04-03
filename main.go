@@ -33,5 +33,5 @@ func main() {
 
 	r := racer.New(*clusterIP, *port)
 	r.SignalMaster(&model.Message{Source: r.IPAddr + ":" + r.Port})
-	r.ListenForNewCoordinates()
+	r.ListenForNewLap()
 }

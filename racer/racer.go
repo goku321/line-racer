@@ -15,6 +15,7 @@ type Racer struct {
 	ID     string
 	IPAddr string
 	Port   string
+	Laps   [][]model.Point
 	Status string
 }
 
@@ -94,8 +95,8 @@ func (r *Racer) SendPOSUpdate(m *model.Message) {
 	}
 }
 
-// ListenForNewCoordinates waits for master to get new coordinates
-func (r *Racer) ListenForNewCoordinates() {
+// ListenForNewLap waits for master to get new coordinates
+func (r *Racer) ListenForNewLap() {
 	ln, err := net.Listen("tcp", ":"+r.Port)
 	if err != nil {
 		log.Fatal(err)
@@ -124,6 +125,7 @@ func handleConnection(conn net.Conn, r *Racer) {
 	}
 
 	if msg.Type == "race" {
+		r.Laps = append(r.Laps, msg.Coordinates)
 		r.race(msg.Coordinates)
 	} else if msg.Type == "kill" {
 		log.Fatal("racer is being killed")
@@ -139,6 +141,7 @@ func (r *Racer) race(l []model.Point) {
 	// add a check for invalid lap
 	m, c := l[racerIndex].X, l[racerIndex].Y
 	p := getStartingPoint(l)
+	log.Printf("racer %s starting from (%d, %d)", r.ID, p.X, p.Y)
 
 	for {
 		time.Sleep(time.Millisecond * 50)
