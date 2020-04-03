@@ -12,7 +12,7 @@ import (
 
 // Racer represents a racer
 type Racer struct {
-	ID     int
+	ID     string
 	IPAddr string
 	Port   string
 	Status string
@@ -46,12 +46,6 @@ func (r *Racer) SignalMaster(m *master.Message) {
 			log.Print("tyring to establish connection to master, retrying in 5 seconds")
 			time.Sleep(time.Second * 5)
 		} else {
-			if m.Type == "pos" {
-				if err = json.NewEncoder(conn).Encode(&m); err != nil {
-					log.Printf("error communicating to master: %v", err)
-				}
-				break
-			}
 			m.Type = "ready"
 			m.Dest = "127.0.0.1:3000"
 			err := json.NewEncoder(conn).Encode(&m)
@@ -62,6 +56,33 @@ func (r *Racer) SignalMaster(m *master.Message) {
 			err = json.NewDecoder(conn).Decode(&id)
 			log.Printf("id received from master %d", id)
 			conn.Close()
+			break
+		}
+	}
+}
+
+// SendPOSUpdate sends position updates to master every 50ms
+func (r *Racer) SendPOSUpdate(m *master.Message) {
+	laddr, err := net.ResolveTCPAddr("tcp", "")
+	if err != nil {
+		log.Fatalf("error resolving tcp address: %s, reason: %v", r.IPAddr+":"+r.Port, err)
+	}
+
+	raddr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:3000")
+	if err != nil {
+		log.Fatalf("error resolving tcp address: %v", err)
+	}
+
+	for {
+		conn, err := net.DialTCP("tcp", laddr, raddr)
+		if err != nil {
+			log.Print("tyring to establish connection to master, retrying in 5 seconds")
+			time.Sleep(time.Second * 5)
+		} else {
+			defer conn.Close()
+			if err = json.NewEncoder(conn).Encode(&m); err != nil {
+				log.Printf("error communicating to master: %v", err)
+			}
 			break
 		}
 	}
@@ -112,12 +133,12 @@ func (r *Racer) race(c []model.Point) {
 		time.Sleep(time.Millisecond * 50)
 		p.X++
 		m := &master.Message{
-			Source:      r.IPAddr + ":" + r.Port,
+			Source:      r.ID,
 			Dest:        "127.0.0.1:3000",
 			Type:        "pos",
 			Coordinates: []model.Point{p},
 		}
-		r.SignalMaster(m)
+		r.SendPOSUpdate(m)
 	}
 }
 
