@@ -13,6 +13,7 @@ import (
 func main() {
 	nodeType := flag.String("nodeType", "master", "type of node: master/racer")
 	racers := flag.Int("racers", 2, "number of racers")
+	laps := flag.Int("laps", 10, "number of lap")
 	clusterIP := flag.String("clusterIP", "127.0.0.1", "ip address of the node")
 	port := flag.String("port", "3000", "port to use")
 	flag.Parse()
@@ -23,7 +24,7 @@ func main() {
 	}
 
 	if *nodeType == "master" {
-		m := master.New(*clusterIP, *port, *racers)
+		m := master.New(*clusterIP, *port, *racers, *laps)
 		m.GenerateLaps()
 		go m.Listen()
 		m.WaitForRacers()

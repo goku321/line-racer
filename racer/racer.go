@@ -129,7 +129,8 @@ func handleConnection(conn net.Conn, r *Racer) {
 		r.Laps = append(r.Laps, msg.Coordinates)
 		r.race(msg.Coordinates)
 	} else if msg.Type == "kill" {
-		log.Fatal("racer is being killed")
+		log.Print("kill signal received. racer will terminate")
+		r.printLaps()
 		os.Exit(0)
 	}
 }
@@ -156,6 +157,12 @@ func (r *Racer) race(l []model.Point) {
 			Coordinates: []model.Point{p},
 		}
 		r.SendPOSUpdate(m)
+	}
+}
+
+func (r *Racer) printLaps() {
+	for k, v := range r.Laps {
+		log.Printf("lap %d: %v", k+1, v)
 	}
 }
 

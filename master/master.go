@@ -15,14 +15,15 @@ var wg sync.WaitGroup
 
 // Master manages all the racers
 type Master struct {
-	IPAddr          string
-	Port            string
-	racersCount     int
-	racers          map[int]string
-	posUpdates      []pos
-	laps            []lap
-	currentLapCount int
-	mutex           sync.Mutex
+	IPAddr      string
+	Port        string
+	racersCount int
+	racers      map[int]string
+	posUpdates  []pos // can be a queue
+	laps        []lap
+	lapsCount   int
+	racerMutex  sync.Mutex
+	posMutex    sync.Mutex
 }
 
 // lap represent a single lap
@@ -40,7 +41,7 @@ type pos struct {
 	model.Point
 }
 
-// NewLap generates a new lap
+// NewLap returns a new lap
 func NewLap(number int, pos []model.Point) *lap {
 	return &lap{
 		number: number,
@@ -48,16 +49,15 @@ func NewLap(number int, pos []model.Point) *lap {
 	}
 }
 
-// New inits new master
-func New(ip, port string, racersCount int) *Master {
+// New returns new master
+func New(ip, port string, racersCount, lapsCount int) *Master {
 	return &Master{
-		IPAddr:          ip,
-		Port:            port,
-		racers:          map[int]string{},
-		racersCount:     racersCount,
-		laps:            []lap{},
-		currentLapCount: 0,
-		mutex:           sync.Mutex{},
+		IPAddr:      ip,
+		Port:        port,
+		racers:      map[int]string{},
+		racersCount: racersCount,
+		laps:        []lap{},
+		lapsCount:   lapsCount,
 	}
 }
 
@@ -91,12 +91,12 @@ func handleConnection(conn net.Conn, m *Master) {
 
 	if msg.Type == "ready" {
 		// assign a unique index (0 <= index < racersCount)
-		m.mutex.Lock()
+		m.racerMutex.Lock()
 		id := len(m.racers)
-		m.mutex.Unlock()
-
 		// register racer
 		m.registerRacer(id, msg.Source)
+		m.racerMutex.Unlock()
+
 		if err = json.NewEncoder(conn).Encode(&id); err != nil {
 			log.Fatal(err)
 		}
@@ -108,7 +108,7 @@ func handleConnection(conn net.Conn, m *Master) {
 	}
 }
 
-// SendLap sends a lap to racers
+// SendMessage sends a lap to racers
 func (m *Master) SendMessage(racer string, msg model.Message) {
 	defer wg.Done()
 	laddr, err := net.ResolveTCPAddr("tcp", "")
@@ -142,8 +142,7 @@ func (m *Master) GenerateLaps() {
 	s := rand.NewSource(time.Now().UnixNano())
 	r := rand.New(s)
 
-	// 10 is total number of laps
-	for i := 0; i < 10; i++ {
+	for i := 0; i < m.lapsCount; i++ {
 		l := []model.Point{}
 		for j := 0; j < m.racersCount; j++ {
 			p := model.New(r.Intn(50000), r.Intn(50000))
@@ -155,9 +154,7 @@ func (m *Master) GenerateLaps() {
 }
 
 func (m *Master) registerRacer(id int, r string) {
-	m.mutex.Lock()
 	m.racers[id] = r
-	m.mutex.Unlock()
 }
 
 func (m *Master) updatePOS(id string, p model.Point) {
@@ -165,9 +162,9 @@ func (m *Master) updatePOS(id string, p model.Point) {
 		id:    id,
 		Point: p,
 	}
-	m.mutex.Lock()
+	m.posMutex.Lock()
 	m.posUpdates = append(m.posUpdates, *u)
-	m.mutex.Unlock()
+	m.posMutex.Unlock()
 }
 
 // CalculateDistance constantly polls a slice
@@ -177,13 +174,13 @@ func (m *Master) CalculateDistance() {
 			p1 := m.posUpdates[0]
 			p2 := m.posUpdates[1]
 			if p1.id == p2.id {
-				m.mutex.Lock()
+				m.posMutex.Lock()
 				m.posUpdates = m.posUpdates[1:]
-				m.mutex.Unlock()
+				m.posMutex.Unlock()
 			} else {
-				m.mutex.Lock()
+				m.posMutex.Lock()
 				m.posUpdates = m.posUpdates[2:]
-				m.mutex.Unlock()
+				m.posMutex.Unlock()
 				d := p1.Point.Distance(p2.Point)
 
 				if d > 10 {
@@ -219,6 +216,7 @@ func (m *Master) StartRace() {
 		m.CalculateDistance()
 		end := time.Now()
 		m.updateLap(k, start, end)
+		// Clear update queue
 	}
 	m.SendKillMessage()
 }
@@ -234,10 +232,10 @@ func (m *Master) SendKillMessage() {
 	wg.Wait()
 }
 
-// PrintLaps ...
+// PrintLaps prints all the laps
 func (m *Master) PrintLaps() {
 	for k, v := range m.laps {
-		log.Printf("lap %d completed in %dms", k+1, v.timeElapsed)
+		log.Printf("%d %v %s %s %d", k+1, v.pos, v.start, v.end, v.timeElapsed)
 	}
 }
 
