@@ -2,7 +2,6 @@ package master
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"math/rand"
 	"net"
@@ -11,6 +10,8 @@ import (
 
 	"github.com/goku321/line-racer/model"
 )
+
+var wg sync.WaitGroup
 
 // Master manages all the racers
 type Master struct {
@@ -39,15 +40,6 @@ type pos struct {
 	model.Point
 }
 
-// Node represents a process
-type Node struct {
-	ID     string `json:"id"`
-	IPAddr string `json:"ip_addr"`
-	Port   string `json:"port"`
-	Type   string `json:"type"`
-	Status string `json:"status"`
-}
-
 // NewLap generates a new lap
 func NewLap(number int, pos []model.Point) *lap {
 	return &lap{
@@ -66,17 +58,6 @@ func New(ip, port string, racersCount int) *Master {
 		laps:            []lap{},
 		currentLapCount: 0,
 		mutex:           sync.Mutex{},
-	}
-}
-
-// NewNode inits and returns new node
-func NewNode(ip, port, t string) *Node {
-	return &Node{
-		ID:     fmt.Sprintf("%s:%s", ip, port),
-		IPAddr: ip,
-		Port:   port,
-		Type:   t,
-		Status: "down",
 	}
 }
 
@@ -101,8 +82,6 @@ func (m *Master) Listen() {
 
 func handleConnection(conn net.Conn, m *Master) {
 	defer conn.Close()
-	s := conn.RemoteAddr().String()
-	log.Printf("Serving %s\n", s)
 
 	var msg model.Message
 	err := json.NewDecoder(conn).Decode(&msg)
@@ -121,7 +100,6 @@ func handleConnection(conn net.Conn, m *Master) {
 		if err = json.NewEncoder(conn).Encode(&id); err != nil {
 			log.Fatal(err)
 		}
-		go m.SendLap(msg.Source)
 
 	} else if msg.Type == "pos" {
 		log.Printf("racer %s position update: (%d, %d)", msg.Source, msg.Coordinates[0].X, msg.Coordinates[0].Y)
@@ -130,7 +108,8 @@ func handleConnection(conn net.Conn, m *Master) {
 }
 
 // SendLap sends a lap to racers
-func (m *Master) SendLap(racer string) {
+func (m *Master) SendLap(racer string, msg model.Message) {
+	defer wg.Done()
 	laddr, err := net.ResolveTCPAddr("tcp", "")
 	if err != nil {
 		log.Fatalf("error resolving tcp address: %v", err)
@@ -147,11 +126,8 @@ func (m *Master) SendLap(racer string) {
 			log.Print("failed to establish connection to racer, retrying...", err)
 			time.Sleep(time.Second * 5)
 		} else {
-			// Send current lap
-			r := m.laps[m.currentLapCount]
-			newMsg := model.NewMessage(m.IPAddr+":"+m.Port, racer, r.pos)
-			newMsg.Type = "race"
-			err := json.NewEncoder(conn).Encode(&newMsg)
+			// Send Lap
+			err := json.NewEncoder(conn).Encode(&msg)
 			if err != nil {
 				log.Printf("error sending lap to racer %s", racer)
 			}
@@ -204,7 +180,6 @@ func (m *Master) CalculateDistance() {
 				m.posUpdates = m.posUpdates[1:]
 				m.mutex.Unlock()
 			} else {
-
 				m.mutex.Lock()
 				m.posUpdates = m.posUpdates[2:]
 				m.mutex.Unlock()
@@ -213,20 +188,44 @@ func (m *Master) CalculateDistance() {
 				if d > 10 {
 					// start a new lap
 					log.Print("distance exceeds 10 units")
-					m.startNewLap()
+					break
 				}
 			}
 		}
 	}
 }
 
-func (m *Master) startNewLap() {
-	if m.currentLapCount == 9 {
-		log.Fatal("race finished")
-		
+// WaitForRacers waits infinitely for racers to get connected
+func (m *Master) WaitForRacers() {
+	for {
+		if len(m.racers) == m.racersCount {
+			break
+		}
 	}
-	m.currentLapCount++
-	for _, v := range m.racers {
-		go m.SendLap(v)
+}
+
+// StartRace inits race
+func (m *Master) StartRace() {
+	for _, v := range m.laps {
+		wg.Add(m.racersCount)
+		for _, r := range m.racers {
+			lapMsg := model.NewMessage(m.IPAddr+":"+m.Port, r, v.pos)
+			lapMsg.Type = "race"
+			go m.SendLap(r, lapMsg)
+		}
+		wg.Wait()
+		m.CalculateDistance()
 	}
+	m.SendKillMessage()
+}
+
+// SendKillMessage sends a kill message to all racers
+func (m *Master) SendKillMessage() {
+	wg.Add(m.racersCount)
+	for _, r := range m.racers {
+		msg := model.NewMessage(m.IPAddr+":"+m.Port, r, []model.Point{})
+		msg.Type = "kill"
+		go m.SendLap(r, msg)
+	}
+	wg.Wait()
 }

@@ -22,16 +22,15 @@ func main() {
 		log.Fatalf("error parsing port number: %s", *port)
 	}
 
-	n := master.NewNode(*clusterIP, *port, *nodeType)
-
-	if n.Type == "master" {
+	if *nodeType == "master" {
 		m := master.New(*clusterIP, *port, *racers)
 		m.GenerateLaps()
-		go m.CalculateDistance()
-		m.Listen()
+		go m.Listen()
+		m.WaitForRacers()
+		m.StartRace()
+	} else {
+		r := racer.New(*clusterIP, *port)
+		r.SignalMaster(&model.Message{Source: r.IPAddr + ":" + r.Port})
+		r.ListenForNewLap()
 	}
-
-	r := racer.New(*clusterIP, *port)
-	r.SignalMaster(&model.Message{Source: r.IPAddr + ":" + r.Port})
-	r.ListenForNewLap()
 }

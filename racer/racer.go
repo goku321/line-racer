@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net"
+	"os"
 	"strconv"
 	"time"
 
@@ -129,6 +130,7 @@ func handleConnection(conn net.Conn, r *Racer) {
 		r.race(msg.Coordinates)
 	} else if msg.Type == "kill" {
 		log.Fatal("racer is being killed")
+		os.Exit(0)
 	}
 }
 
