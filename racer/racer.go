@@ -84,7 +84,7 @@ func (r *Racer) SendPOSUpdate(m *model.Message) {
 	for {
 		conn, err := net.DialTCP("tcp", laddr, raddr)
 		if err != nil {
-			log.Print("tyring to establish connection to master, retrying in 5 seconds")
+			log.Print("tyring to establish connection to master, retrying in 5 seconds", err)
 			time.Sleep(time.Second * 5)
 		} else {
 			if err = json.NewEncoder(conn).Encode(&m); err != nil {
