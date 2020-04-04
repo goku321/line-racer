@@ -29,9 +29,9 @@ type Master struct {
 type lap struct {
 	number      int
 	pos         []model.Point
-	start       string
-	end         string
-	timeElapsed int
+	start       time.Time
+	end         time.Time
+	timeElapsed int64
 }
 
 // pos ...
@@ -90,7 +90,7 @@ func handleConnection(conn net.Conn, m *Master) {
 	}
 
 	if msg.Type == "ready" {
-		// assign a unique index (0 <= index < N)
+		// assign a unique index (0 <= index < racersCount)
 		m.mutex.Lock()
 		id := len(m.racers)
 		m.mutex.Unlock()
@@ -100,6 +100,7 @@ func handleConnection(conn net.Conn, m *Master) {
 		if err = json.NewEncoder(conn).Encode(&id); err != nil {
 			log.Fatal(err)
 		}
+		log.Printf("racer %d connected", id)
 
 	} else if msg.Type == "pos" {
 		log.Printf("racer %s position update: (%d, %d)", msg.Source, msg.Coordinates[0].X, msg.Coordinates[0].Y)
@@ -108,7 +109,7 @@ func handleConnection(conn net.Conn, m *Master) {
 }
 
 // SendLap sends a lap to racers
-func (m *Master) SendLap(racer string, msg model.Message) {
+func (m *Master) SendMessage(racer string, msg model.Message) {
 	defer wg.Done()
 	laddr, err := net.ResolveTCPAddr("tcp", "")
 	if err != nil {
@@ -206,15 +207,18 @@ func (m *Master) WaitForRacers() {
 
 // StartRace inits race
 func (m *Master) StartRace() {
-	for _, v := range m.laps {
+	for k, v := range m.laps {
 		wg.Add(m.racersCount)
+		start := time.Now()
 		for _, r := range m.racers {
 			lapMsg := model.NewMessage(m.IPAddr+":"+m.Port, r, v.pos)
 			lapMsg.Type = "race"
-			go m.SendLap(r, lapMsg)
+			go m.SendMessage(r, lapMsg)
 		}
 		wg.Wait()
 		m.CalculateDistance()
+		end := time.Now()
+		m.updateLap(k, start, end)
 	}
 	m.SendKillMessage()
 }
@@ -225,7 +229,23 @@ func (m *Master) SendKillMessage() {
 	for _, r := range m.racers {
 		msg := model.NewMessage(m.IPAddr+":"+m.Port, r, []model.Point{})
 		msg.Type = "kill"
-		go m.SendLap(r, msg)
+		go m.SendMessage(r, msg)
 	}
 	wg.Wait()
+}
+
+// PrintLaps ...
+func (m *Master) PrintLaps() {
+	for k, v := range m.laps {
+		log.Printf("lap %d completed in %dms", k+1, v.timeElapsed)
+	}
+}
+
+// updateLap updates start and end time for a lap
+func (m *Master) updateLap(index int, start, end time.Time) {
+	l := m.laps[index]
+	l.start = start
+	l.end = end
+	l.timeElapsed = end.Sub(start).Milliseconds()
+	m.laps[index] = l
 }

@@ -28,6 +28,7 @@ func main() {
 		go m.Listen()
 		m.WaitForRacers()
 		m.StartRace()
+		m.PrintLaps()
 	} else {
 		r := racer.New(*clusterIP, *port)
 		r.SignalMaster(&model.Message{Source: r.IPAddr + ":" + r.Port})
