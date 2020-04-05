@@ -49,7 +49,7 @@ func (r *Racer) SignalMaster(m *model.Message) {
 	for {
 		conn, err := net.DialTCP("tcp", laddr, raddr)
 		if err != nil {
-			log.Print("tyring to establish connection to master, retrying in 5 seconds")
+			log.Printf("connecting to master, %v", err)
 			time.Sleep(time.Second * 5)
 		} else {
 			m.Type = "ready"
@@ -84,11 +84,11 @@ func (r *Racer) SendPOSUpdate(m *model.Message) {
 	for {
 		conn, err := net.DialTCP("tcp", laddr, raddr)
 		if err != nil {
-			log.Print("tyring to establish connection to master, retrying in 5 seconds", err)
+			log.Printf("racer %s: connecting to master, %v", r.ID, err)
 			time.Sleep(time.Second * 5)
 		} else {
 			if err = json.NewEncoder(conn).Encode(&m); err != nil {
-				log.Printf("error communicating to master: %v", err)
+				log.Printf("racer %s: error communicating to master: %v", r.ID, err)
 			}
 			conn.Close()
 			break
@@ -100,10 +100,10 @@ func (r *Racer) SendPOSUpdate(m *model.Message) {
 func (r *Racer) ListenForNewLap() {
 	ln, err := net.Listen("tcp", ":"+r.Port)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("racer %s: %v", r.ID, err)
 	}
 
-	log.Printf("racer %s listening on %s:%s", r.ID, r.IPAddr, r.Port)
+	log.Printf("racer %s: listening on %s:%s", r.ID, r.IPAddr, r.Port)
 
 	for {
 		conn, err := ln.Accept()
@@ -117,26 +117,26 @@ func (r *Racer) ListenForNewLap() {
 
 func handleConnection(conn net.Conn, r *Racer) {
 	defer conn.Close()
-	log.Println("new lap from master")
+	log.Printf("racer %s: new lap from master", r.ID)
 
 	var msg model.Message
 	err := json.NewDecoder(conn).Decode(&msg)
 	if err != nil {
-		log.Print(err)
+		log.Printf("racer %s: %v", r.ID, err)
 	}
 
 	if msg.Type == "race" {
 		r.Laps = append(r.Laps, msg.Coordinates)
 		r.race(msg.Coordinates)
 	} else if msg.Type == "kill" {
-		log.Print("kill signal received. racer will terminate")
+		log.Printf("racer %s: kill signal received. racer will terminate", r.ID)
 		r.printLaps()
 		os.Exit(0)
 	}
 }
 
 func (r *Racer) race(l []model.Point) {
-	log.Printf("racing on lap %v", l)
+	log.Printf("racer %s: racing on lap %v", r.ID, l)
 	racerIndex, err := strconv.Atoi(r.ID)
 	if err != nil {
 		log.Fatalf("invalid racer index %s", r.ID)
@@ -144,7 +144,7 @@ func (r *Racer) race(l []model.Point) {
 	// add a check for invalid lap
 	m, c := l[racerIndex].X, l[racerIndex].Y
 	p := getStartingPoint(l)
-	log.Printf("racer %s starting from (%d, %d)", r.ID, p.X, p.Y)
+	log.Printf("racer %s: starting race from (%d, %d)", r.ID, p.X, p.Y)
 
 	for {
 		time.Sleep(time.Millisecond * 50)
@@ -162,7 +162,7 @@ func (r *Racer) race(l []model.Point) {
 
 func (r *Racer) printLaps() {
 	for k, v := range r.Laps {
-		log.Printf("lap %d: %v", k+1, v)
+		log.Printf("racer %s: lap %d: %v", r.ID, k+1, v)
 	}
 }
 

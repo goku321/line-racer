@@ -35,7 +35,7 @@ type lap struct {
 	timeElapsed int64
 }
 
-// pos ...
+// pos represents  position of a racer
 type pos struct {
 	id string
 	model.Point
@@ -124,7 +124,7 @@ func (m *Master) SendMessage(racer string, msg model.Message) {
 	for {
 		conn, err := net.DialTCP("tcp", laddr, raddr)
 		if err != nil {
-			log.Print("failed to establish connection to racer, retrying...", err)
+			log.Print("master: failed to establish connection to racer, retrying...", err)
 			time.Sleep(time.Second * 5)
 		} else {
 			// Send Lap
@@ -206,6 +206,7 @@ func (m *Master) WaitForRacers() {
 func (m *Master) StartRace() {
 	for k, v := range m.laps {
 		wg.Add(m.racersCount)
+
 		start := time.Now()
 		for _, r := range m.racers {
 			lapMsg := model.NewMessage(m.IPAddr+":"+m.Port, r, v.pos)
@@ -215,6 +216,7 @@ func (m *Master) StartRace() {
 		wg.Wait()
 		m.CalculateDistance()
 		end := time.Now()
+
 		m.updateLap(k, start, end)
 		// Clear update queue
 	}
