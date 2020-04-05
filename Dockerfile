@@ -6,4 +6,4 @@ RUN go install github.com/goku321/line-racer
 
 EXPOSE 3000
 
-ENTRYPOINT [ /go/bin/line-racer ]
+ENTRYPOINT [ ./go/bin/line-racer ]

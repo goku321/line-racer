@@ -1,0 +1,23 @@
+version: '3'
+
+services:
+    master:
+        image: golang
+        volumes:
+            - ./:/go/src/github.com/goku321/line-racer
+        command: [sh, -c, "go install github.com/goku321/line-racer && /go/bin/line-racer"]
+        ports: [3000:3000]
+    
+    racer1:
+        image: golang
+        volumes:
+            - ./:/go/src/github.com/goku321/line-racer
+        command: [sh, -c, "go install github.com/goku321/line-racer && /go/bin/line-racer -nodeType racer -port 4000"]
+        ports: [4000:4000]
+    
+    racer2:
+        image: golang
+        volumes:
+            - ./:/go/src/github.com/goku321/line-racer
+        command: [sh, -c, "go install github.com/goku321/line-racer && /go/bin/line-racer -nodeType racer -port 5000"]
+        ports: [5000:5000]
