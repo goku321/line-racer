@@ -6,18 +6,18 @@ services:
         volumes:
             - ./:/go/src/github.com/goku321/line-racer
         command: [sh, -c, "go install github.com/goku321/line-racer && /go/bin/line-racer"]
-        ports: [3000:3000]
+        ports: [3000:3000/tcp]
     
     racer1:
         image: golang
         volumes:
             - ./:/go/src/github.com/goku321/line-racer
-        command: [sh, -c, "go install github.com/goku321/line-racer && /go/bin/line-racer -nodeType racer -port 4000"]
-        ports: [4000:4000]
+        command: [sh, -c, "go install github.com/goku321/line-racer && /go/bin/line-racer -nodeType racer -port 4000 -ip racer1 -masterIP master"]
+        ports: [4000:4000/tcp]
     
     racer2:
         image: golang
         volumes:
             - ./:/go/src/github.com/goku321/line-racer
-        command: [sh, -c, "go install github.com/goku321/line-racer && /go/bin/line-racer -nodeType racer -port 5000"]
-        ports: [5000:5000]
+        command: [sh, -c, "go install github.com/goku321/line-racer && /go/bin/line-racer -nodeType racer -port 8000 -ip racer2 -masterIP master"]
+        ports: [8000:8000/tcp]

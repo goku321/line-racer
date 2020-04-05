@@ -11,10 +11,12 @@ import (
 )
 
 func main() {
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	nodeType := flag.String("nodeType", "master", "type of node: master/racer")
+	masterIP := flag.String("masterIP", "127.0.0.1", "ip address of master process")
 	racers := flag.Int("racers", 2, "number of racers")
 	laps := flag.Int("laps", 10, "number of lap")
-	clusterIP := flag.String("clusterIP", "127.0.0.1", "ip address of the node")
+	ip := flag.String("ip", "127.0.0.1", "ip address of the node")
 	port := flag.String("port", "3000", "port to use")
 	flag.Parse()
 
@@ -24,14 +26,14 @@ func main() {
 	}
 
 	if *nodeType == "master" {
-		m := master.New(*clusterIP, *port, *racers, *laps)
+		m := master.New(*ip, *port, *racers, *laps)
 		m.GenerateLaps()
 		go m.Listen()
 		m.WaitForRacers()
 		m.StartRace()
 		m.PrintLaps()
 	} else {
-		r := racer.New(*clusterIP, *port)
+		r := racer.New(*ip, *port, *masterIP)
 		r.SignalMaster(&model.Message{Source: r.IPAddr + ":" + r.Port})
 		r.ListenForNewLap()
 	}

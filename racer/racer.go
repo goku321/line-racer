@@ -13,19 +13,21 @@ import (
 
 // Racer represents a racer
 type Racer struct {
-	ID     string
-	IPAddr string
-	Port   string
-	Laps   [][]model.Point
-	Status string
+	ID       string
+	IPAddr   string
+	Port     string
+	Master   string
+	Laps     [][]model.Point
+	Status   string
 }
 
 // New returns a new racer type
-func New(ip, port string) *Racer {
+func New(ip, port, masterIP string) *Racer {
 	return &Racer{
 		IPAddr: ip,
 		Port:   port,
 		Status: "up",
+		Master: masterIP,
 	}
 }
 
@@ -41,7 +43,7 @@ func (r *Racer) SignalMaster(m *model.Message) {
 		log.Fatalf("error resolving tcp address: %s, reason: %v", r.IPAddr+":"+r.Port, err)
 	}
 
-	raddr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:3000")
+	raddr, err := net.ResolveTCPAddr("tcp", r.Master+":3000")
 	if err != nil {
 		log.Fatalf("error resolving tcp address: %v", err)
 	}
@@ -53,7 +55,7 @@ func (r *Racer) SignalMaster(m *model.Message) {
 			time.Sleep(time.Second * 5)
 		} else {
 			m.Type = "ready"
-			m.Dest = "127.0.0.1:3000"
+			m.Dest = r.Master + ":3000"
 			err := json.NewEncoder(conn).Encode(&m)
 			if err != nil {
 				log.Fatalf("error communicating to master: %v", err)
@@ -62,8 +64,8 @@ func (r *Racer) SignalMaster(m *model.Message) {
 			if err = json.NewDecoder(conn).Decode(&id); err != nil {
 				log.Fatalf("error receiving id from master: %v", err)
 			}
-			updateRacerID(r, id)
 			conn.Close()
+			updateRacerID(r, id)
 			break
 		}
 	}
@@ -76,7 +78,7 @@ func (r *Racer) SendPOSUpdate(m *model.Message) {
 		log.Fatalf("error resolving tcp address: %s, reason: %v", r.IPAddr+":"+r.Port, err)
 	}
 
-	raddr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:3000")
+	raddr, err := net.ResolveTCPAddr("tcp", r.Master+":3000")
 	if err != nil {
 		log.Fatalf("error resolving tcp address: %v", err)
 	}
@@ -116,7 +118,6 @@ func (r *Racer) ListenForNewLap() {
 }
 
 func handleConnection(conn net.Conn, r *Racer) {
-	defer conn.Close()
 	log.Printf("racer %s: new lap from master", r.ID)
 
 	var msg model.Message
@@ -124,6 +125,9 @@ func handleConnection(conn net.Conn, r *Racer) {
 	if err != nil {
 		log.Printf("racer %s: %v", r.ID, err)
 	}
+
+	// close connection here as message has already been received
+	conn.Close()
 
 	if msg.Type == "race" {
 		r.Laps = append(r.Laps, msg.Coordinates)
