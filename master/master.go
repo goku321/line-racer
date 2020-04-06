@@ -5,6 +5,7 @@ import (
 	"log"
 	"math/rand"
 	"net"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,6 +23,7 @@ type Master struct {
 	racersCount int
 	racers      map[string]string
 	posUpdates  []pos // can be a queue
+	posRecords  []pos
 	laps        []lap
 	lapsCount   int
 	racerMutex  sync.Mutex
@@ -35,11 +37,13 @@ type lap struct {
 	start       time.Time
 	end         time.Time
 	timeElapsed int64
+	latencies   map[string]int64
 }
 
 // pos represents  position of a racer
 type pos struct {
-	id string
+	id         string
+	updateTime time.Time
 	model.Point
 }
 
@@ -172,11 +176,13 @@ func (m *Master) registerRacer(id string, r string) {
 
 func (m *Master) updatePOS(id string, p model.Point) {
 	u := &pos{
-		id:    id,
-		Point: p,
+		id:         id,
+		updateTime: time.Now(),
+		Point:      p,
 	}
 	m.posMutex.Lock()
 	m.posUpdates = append(m.posUpdates, *u)
+	m.posRecords = append(m.posRecords, *u)
 	m.posMutex.Unlock()
 }
 
@@ -198,7 +204,6 @@ func (m *Master) CalculateDistance() {
 
 				if d > 10 {
 					// start a new lap
-					log.Print("distance exceeds 10 units")
 					break
 				}
 			}
@@ -230,8 +235,10 @@ func (m *Master) StartRace() {
 		m.CalculateDistance()
 		end := time.Now()
 
-		m.updateLap(k, start, end)
-		// Clear update queue
+		latencies := m.calculateLatency(start)
+		m.updateLap(k, start, end, latencies)
+		// Clear position update queue
+		m.posUpdates = []pos{}
 	}
 	m.SendKillMessage()
 }
@@ -248,16 +255,54 @@ func (m *Master) SendKillMessage() {
 
 // PrintLaps prints all the laps
 func (m *Master) PrintLaps() {
+	sort.Slice(m.laps, func(i, j int) bool {
+		return m.laps[i].timeElapsed < m.laps[j].timeElapsed
+	})
 	for k, v := range m.laps {
-		log.Printf("%d %v %s %s %d", k+1, v.pos, v.start, v.end, v.timeElapsed)
+		log.Printf("Lap %d %v %s %s %d %d %d", k+1, v.pos, v.start.Format("03:04:05"), v.end.Format("03:04:05"), v.timeElapsed, v.latencies["0"], v.latencies["1"])
 	}
 }
 
 // updateLap updates start and end time for a lap
-func (m *Master) updateLap(index int, start, end time.Time) {
+func (m *Master) updateLap(index int, start, end time.Time, latencies map[string]int64) {
 	l := m.laps[index]
 	l.start = start
 	l.end = end
 	l.timeElapsed = end.Sub(start).Milliseconds()
+	l.latencies = latencies
 	m.laps[index] = l
+}
+
+// calculateLatency calculates latencies for each racer
+func (m *Master) calculateLatency(lapStart time.Time) map[string]int64 {
+	latencies := map[string]int64{}
+	for r := range m.racers {
+		racerPos := []pos{}
+		// copy racer's position updates to a new slice
+		for _, u := range m.posRecords {
+			if r == u.id {
+				racerPos = append(racerPos, u)
+			}
+		}
+
+		// sort the slice
+		sort.Slice(racerPos, func(i, j int) bool {
+			return racerPos[i].X < racerPos[j].X
+		})
+
+		// add difference b/w the time first update was received
+		// lap start time
+		lat := 50 - (racerPos[0].updateTime.Sub(lapStart))
+		// calculate latency
+		for i := 1; i < len(racerPos); i++ {
+			t1, t2 := racerPos[i-1], racerPos[i]
+			lat += 50 - (t2.updateTime.Sub(t1.updateTime))
+		}
+
+		var totalUpdates int64
+		totalUpdates = int64(len(racerPos) + 1)
+
+		latencies[r] = lat.Milliseconds() / totalUpdates
+	}
+	return latencies
 }
