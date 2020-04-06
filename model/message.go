@@ -9,11 +9,20 @@ type Message struct {
 }
 
 // NewMessage returns a new message
-func NewMessage(source, dest string, c []Point) Message {
-	return Message{
+func NewMessage(source, dest, msgType string, c []Point) *Message {
+	return &Message{
 		Source:      source,
 		Dest:        dest,
-		Type:        "ready",
+		Type:        msgType,
 		Coordinates: c,
+	}
+}
+
+// NewPingMessage returns a new message
+func NewPingMessage(source, dest string) *Message {
+	return &Message{
+		Source: source,
+		Dest:   dest,
+		Type:   "ping",
 	}
 }

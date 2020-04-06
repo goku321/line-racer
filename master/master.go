@@ -5,6 +5,8 @@ import (
 	"log"
 	"math/rand"
 	"net"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,7 +20,7 @@ type Master struct {
 	IPAddr      string
 	Port        string
 	racersCount int
-	racers      map[int]string
+	racers      map[string]string
 	posUpdates  []pos // can be a queue
 	laps        []lap
 	lapsCount   int
@@ -54,11 +56,25 @@ func New(ip, port string, racersCount, lapsCount int) *Master {
 	return &Master{
 		IPAddr:      ip,
 		Port:        port,
-		racers:      map[int]string{},
+		racers:      map[string]string{},
 		racersCount: racersCount,
 		laps:        []lap{},
 		lapsCount:   lapsCount,
 	}
+}
+
+// NewConnection returns new tcp connection
+func (m *Master) NewConnection(racer string) (*net.TCPConn, error) {
+	srcAddr, err := net.ResolveTCPAddr("tcp", "")
+	if err != nil {
+		return nil, err
+	}
+
+	dstAddr, err := net.ResolveTCPAddr("tcp", racer)
+	if err != nil {
+		return nil, err
+	}
+	return net.DialTCP("tcp", srcAddr, dstAddr)
 }
 
 // Listen starts listening on a port
@@ -89,18 +105,24 @@ func handleConnection(conn net.Conn, m *Master) {
 		log.Print(err)
 	}
 
-	if msg.Type == "ready" {
-		// assign a unique index (0 <= index < racersCount)
-		m.racerMutex.Lock()
-		id := len(m.racers)
-		// register racer
-		m.registerRacer(id, msg.Source)
-		m.racerMutex.Unlock()
+	if msg.Type == "ping" {
+		s := strings.Split(msg.Source, ":")
+		port := s[0]
+		id, err := strconv.Atoi(s[1])
 
-		if err = json.NewEncoder(conn).Encode(&id); err != nil {
-			log.Fatal(err)
+		if err != nil {
+			log.Printf("invalid racer id %v from %v", id, port)
 		}
-		log.Printf("racer %d connected", id)
+
+		if id < 0 || id >= m.racersCount {
+			log.Fatal("invalid racer id")
+		}
+
+		addr := strings.Split(conn.RemoteAddr().String(), ":")
+		// register racer
+		m.registerRacer(s[1], addr[0]+":"+port)
+
+		log.Printf("racer %d connected - %v", id, time.Now())
 
 	} else if msg.Type == "pos" {
 		log.Printf("racer %s position update: (%d, %d)", msg.Source, msg.Coordinates[0].X, msg.Coordinates[0].Y)
@@ -109,20 +131,11 @@ func handleConnection(conn net.Conn, m *Master) {
 }
 
 // SendMessage sends a lap to racers
-func (m *Master) SendMessage(racer string, msg model.Message) {
+func (m *Master) SendMessage(racer string, msg *model.Message) {
 	defer wg.Done()
-	laddr, err := net.ResolveTCPAddr("tcp", "")
-	if err != nil {
-		log.Fatalf("error resolving tcp address: %v", err)
-	}
-
-	raddr, err := net.ResolveTCPAddr("tcp", racer)
-	if err != nil {
-		log.Fatalf("error resolving tcp address: %s, reason: %v", racer, err)
-	}
 
 	for {
-		conn, err := net.DialTCP("tcp", laddr, raddr)
+		conn, err := m.NewConnection(racer)
 		if err != nil {
 			log.Print("master: failed to establish connection to racer, retrying...", err)
 			time.Sleep(time.Second * 5)
@@ -153,7 +166,7 @@ func (m *Master) GenerateLaps() {
 	}
 }
 
-func (m *Master) registerRacer(id int, r string) {
+func (m *Master) registerRacer(id string, r string) {
 	m.racers[id] = r
 }
 
@@ -209,7 +222,7 @@ func (m *Master) StartRace() {
 
 		start := time.Now()
 		for _, r := range m.racers {
-			lapMsg := model.NewMessage(m.IPAddr+":"+m.Port, r, v.pos)
+			lapMsg := model.NewMessage(m.IPAddr+":"+m.Port, r, "race", v.pos)
 			lapMsg.Type = "race"
 			go m.SendMessage(r, lapMsg)
 		}
@@ -227,8 +240,7 @@ func (m *Master) StartRace() {
 func (m *Master) SendKillMessage() {
 	wg.Add(m.racersCount)
 	for _, r := range m.racers {
-		msg := model.NewMessage(m.IPAddr+":"+m.Port, r, []model.Point{})
-		msg.Type = "kill"
+		msg := model.NewMessage(m.IPAddr+":"+m.Port, r, "kill", []model.Point{})
 		go m.SendMessage(r, msg)
 	}
 	wg.Wait()
